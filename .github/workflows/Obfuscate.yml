@@ -1,0 +1,63 @@
+name: Build Obfuscate BPB Panel
+
+on:
+  push:
+    branches:
+      - main
+  schedule:
+    # 每天 UTC 时间 13:00（北京时间 1:00）自动触发
+    - cron: "0 17 * * *"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: |
+          npm install -g javascript-obfuscator wrangler
+
+      - name: Clone BPB workjs
+        run: |
+          wget -O origin.js https://raw.githubusercontent.com/bia-pain-bache/BPB-Worker-Panel/main/build/unobfuscated-worker.js
+
+      - name: Obfuscate BPB worker js
+        run: |
+          javascript-obfuscator origin.js --output _worker.js \
+          --compact true \
+          --identifier-names-generator hexadecimal \
+          --rename-globals true \
+          --string-array true \
+          --string-array-encoding 'base64' \
+          --string-array-threshold 0.75 \
+          --transform-object-keys true \
+          --unicode-escape-sequence true
+
+      - name: Test with Wrangler
+        run: |
+          # 验证混淆后的代码可运行
+          if [ ! -f "_worker.js" ]; then
+            echo "❌ _worker.js 未生成，混淆失败！"
+            exit 1
+          fi
+          wrangler dev --log-level error &
+          sleep 10  # 等待10秒确认无崩溃
+          kill %1   # 结束测试进程
+
+      - name: Commit changes
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          branch: main
+          commit_message: ':arrows_counterclockwise: 自动更新混淆脚本'
+          commit_author: 'github-actions[bot] <github-actions[bot]@users.noreply.github.com>'
